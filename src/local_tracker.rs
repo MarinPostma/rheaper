@@ -32,8 +32,7 @@ impl LocalTracker {
         use std::io::Write as _;
 
         for item in self.events.drain(..) {
-            serde_json::to_writer(&mut self.file, &item).unwrap();
-            writeln!(&mut self.file, "").unwrap();
+            item.serialize(&mut self.file).unwrap();
         }
 
         self.file.flush().unwrap();

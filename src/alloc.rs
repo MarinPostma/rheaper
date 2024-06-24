@@ -230,7 +230,7 @@ unsafe impl<A: GlobalAlloc> GlobalAlloc for Allocator<A> {
 
             local.bts.insert(id, trace);
 
-            local.maybe_flush();
+            local.maybe_flush(global.config.tracker_event_buffer_size);
         });
 
         ptr
@@ -248,7 +248,7 @@ unsafe impl<A: GlobalAlloc> GlobalAlloc for Allocator<A> {
                 thread_id: 0,
             });
 
-            local.maybe_flush();
+            local.maybe_flush(global.config.tracker_event_buffer_size);
         });
     }
 }

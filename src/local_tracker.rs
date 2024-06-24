@@ -17,8 +17,8 @@ pub(crate) struct LocalTracker {
 }
 
 impl LocalTracker {
-    pub fn maybe_flush(&mut self) {
-        if self.events.len() > 10_000 {
+    pub fn maybe_flush(&mut self, threshold: usize) {
+        if self.events.len() > threshold {
             self.flush_all();
         }
     }

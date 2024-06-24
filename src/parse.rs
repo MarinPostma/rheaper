@@ -1,6 +1,6 @@
-use std::path::Path;
-use std::io::{stdout, BufRead, BufReader, Write};
 use std::fs::File;
+use std::io::{stdout, BufRead, BufReader, Write};
+use std::path::Path;
 
 use hashbrown::HashMap;
 use itertools::Itertools;
@@ -10,22 +10,25 @@ use crate::proto::{AllocEvent, Backtrace};
 
 pub fn parse_profile(profile_path: impl AsRef<Path>, db_path: impl AsRef<Path>) {
     let mut conn = Connection::open(db_path).unwrap();
-    
+
     conn.query_row("pragma journal_mode=wal", (), |_| Ok(()))
         .unwrap();
     conn.execute("pragma synchronous=false", ()).unwrap();
     let mut tx = conn.transaction().unwrap();
-    tx.execute("create table backtraces (id, frame_no, frame)", ())
-        .unwrap();
+    tx.execute(
+        "create table backtraces (id, frame_no, file, line, sym)",
+        (),
+    )
+    .unwrap();
     tx.execute(
         "create table allocations (alloc_after, dealloc_after, bt, size, addr)",
         (),
     )
     .unwrap();
-    
+
     read_backtraces(&profile_path, &mut tx);
     read_events(&profile_path, &mut tx);
-    
+
     tx.commit().unwrap();
 }
 
@@ -38,13 +41,13 @@ fn read_backtraces(path: impl AsRef<Path>, tx: &mut Transaction) {
         let mut line = String::new();
         while file.read_line(&mut line).unwrap() != 0 {
             let bt: Backtrace = serde_json::from_str(&line).unwrap();
-            entries.insert(bt.id, bt.frames);
+            entries.insert(bt.id.to_string(), bt.frames);
             line.clear();
         }
     }
 
     let mut s = tx
-        .prepare("insert into backtraces values (?, ?, ?)")
+        .prepare("insert into backtraces values (?, ?, ?, ?, ?)")
         .unwrap();
     let mut count = 0;
 
@@ -54,7 +57,16 @@ fn read_backtraces(path: impl AsRef<Path>, tx: &mut Transaction) {
         print!("\r{count}          ");
         stdout().flush().unwrap();
         for (i, f) in frames.iter().enumerate() {
-            s.execute((id.to_string(), i, f)).unwrap();
+            s.execute((
+                id.to_string(),
+                i,
+                f.as_ref()
+                    .and_then(|f| f.file.as_ref())
+                    .and_then(|f| f.to_str()),
+                f.as_ref().and_then(|f| f.lineno),
+                f.as_ref().and_then(|f| f.sym_name.as_ref()),
+            ))
+            .unwrap();
         }
     }
 

@@ -1,4 +1,5 @@
 use std::mem::{size_of, MaybeUninit};
+use std::path::PathBuf;
 use std::time::Duration;
 use std::io::{ self, ErrorKind, Read, Write };
 
@@ -7,15 +8,17 @@ use std::io::{ self, ErrorKind, Read, Write };
 pub(crate) enum AllocEvent {
     Alloc {
         seq: usize,
-        bt: u128,
+        bt: u64,
         after: Duration,
         size: usize,
         addr: usize,
+        thread_id: usize,
     },
     Dealloc {
         seq: usize,
         after: Duration,
         addr: usize,
+        thread_id: usize,
     },
 }
 
@@ -57,8 +60,15 @@ impl AllocEvent {
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub(crate) struct Backtrace {
-    pub frames: Vec<String>,
-    pub id: u128,
+    pub frames: Vec<Option<Frame>>,
+    pub id: u64,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub(crate) struct Frame {
+    pub(crate) file: Option<PathBuf>,
+    pub(crate) lineno: Option<u32>,
+    pub(crate) sym_name: Option<String>,
 }
 
 #[cfg(test)]

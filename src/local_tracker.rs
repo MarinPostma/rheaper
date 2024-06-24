@@ -1,24 +1,19 @@
+use std::ffi::c_void;
 use std::path::{Path, PathBuf};
 use std::io::BufWriter;
 use std::fs::File;
+use std::io::Write as _;
 
+use backtrace::resolve;
 use hashbrown::HashMap;
 
-use crate::{alloc::untracked, id::Id, proto::AllocEvent};
+use crate::proto::{AllocEvent, Frame};
 
 pub(crate) struct LocalTracker {
-    pub(crate) bts: HashMap<Id, backtrace::Backtrace>,
+    pub(crate) bts: HashMap<u64, Vec<usize>>,
     pub(crate) events: Vec<AllocEvent>,
     pub(crate) file: BufWriter<std::fs::File>,
     pub(crate) path: PathBuf,
-}
-
-impl Drop for LocalTracker {
-    fn drop(&mut self) {
-        untracked(|| {
-            self.finalize();
-        });
-    }
 }
 
 impl LocalTracker {
@@ -38,37 +33,36 @@ impl LocalTracker {
         self.file.flush().unwrap();
     }
 
-    pub fn finalize(&mut self) {
+    pub fn finalize(&mut self, id: usize) {
         self.flush_all();
-        for bt in self.bts.values_mut() {
-            bt.resolve();
-        }
 
-        let thread_id = std::thread::current().id();
-        let path = self.path.join("backtraces").join(format!("bt-{thread_id:?}"));
+        let path = self.path.join("backtraces").join(format!("bt-{id}"));
         let mut sym_file = BufWriter::new(File::create(path).unwrap());
         for (id, bt) in self.bts.iter() {
             let mut frames = Vec::new();
-            for frame in bt.frames() {
-                if let Some(sym) = &frame.symbols().get(0) {
-                    if sym.filename().is_some() && sym.lineno().is_some() && sym.name().is_some() {
-                        frames.push(format!(
-                            "{}:{} - {}",
-                            sym.filename().unwrap().display(),
-                            sym.lineno().unwrap(),
-                            sym.name().unwrap()
-                        ));
-                        continue;
+            for frame in bt {
+                let mut called = false;
+                resolve(*frame as *mut usize as *mut c_void, |sym| {
+                    if !called {
+                        called = true;
+                        if sym.filename().is_some() && sym.lineno().is_some() && sym.name().is_some() {
+                            frames.push(Some(Frame {
+                                file: sym.filename().map(ToOwned::to_owned),
+                                lineno: sym.lineno(),
+                                sym_name: sym.name().map(|s| s.to_string()),
+                            }));
+                        }
                     }
-                }
+                });
 
-                frames.push("<unknown>".to_string());
+                if !called {
+                    frames.push(None);
+                }
             }
 
-            serde_json::to_writer(&mut sym_file, &super::proto::Backtrace { frames, id: id.0 }).unwrap();
+            serde_json::to_writer(&mut sym_file, &super::proto::Backtrace { frames, id: *id }).unwrap();
 
-            use std::io::Write as _;
-            writeln!(&mut sym_file, "").unwrap();
+            writeln!(&mut sym_file).unwrap();
 
             sym_file.flush().unwrap();
         }

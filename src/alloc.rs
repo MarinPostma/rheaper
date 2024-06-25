@@ -115,14 +115,11 @@ impl Display for Error {
 
 /// Enable tracking, and return the raw profile data path
 pub fn enable_tracking(config: TrackerConfig) -> Result<PathBuf, Error> {
-    dbg!();
     let mut guard = GLOBAL.write();
-    dbg!();
     if guard.is_some() {
         return Err(Error::AlreadyEnabled);
     }
 
-    dbg!();
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
     let path = format!("hip-{}", now.as_secs());
     let path = config.profile_dir.join(path);

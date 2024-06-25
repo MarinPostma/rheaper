@@ -10,7 +10,7 @@ hashbrown = "0.14.5"
 itertools = "0.13.0"
 parking_lot = "0.12.3"
 rand = "0.8.5"
-rusqlite = "0.31.0"
+rusqlite = { version = "0.31.0", optional = true }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_json = "1.0.117"
 thread-id = "4.2.1"
@@ -18,3 +18,8 @@ zerocopy = { version = "0.7.34", features = ["derive"] }
 
 [dev-dependencies]
 tempfile = "3.10.1"
+
+[features]
+default = ["parse", "allocator"]
+allocator = []
+parse = ["dep:rusqlite"]

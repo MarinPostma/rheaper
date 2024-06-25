@@ -21,7 +21,7 @@ pub fn parse_profile(profile_path: impl AsRef<Path>, db_path: impl AsRef<Path>) 
     )
     .unwrap();
     tx.execute(
-        "create table allocations (alloc_after, dealloc_after, bt, size, addr)",
+        "create table allocations (alloc_after, dealloc_after, bt, size, addr, alloc_thread, dealloc_thread)",
         (),
     )
     .unwrap();
@@ -84,10 +84,10 @@ fn read_events(path: impl AsRef<Path>, tx: &mut Transaction) {
 
     let mut allocs = HashMap::new();
     let mut alloc = tx
-        .prepare("insert into allocations values (?, NULL, ?, ?, ?) RETURNING rowid")
+        .prepare("insert into allocations values (?, NULL, ?, ?, ?, ?, NULL) RETURNING rowid")
         .unwrap();
     let mut dealloc = tx
-        .prepare("update allocations set dealloc_after = ? where rowid = ?")
+        .prepare("update allocations set dealloc_after = ?, dealloc_thread = ? where rowid = ?")
         .unwrap();
     let mut count = 0;
     println!("analyzing events:");
@@ -101,19 +101,20 @@ fn read_events(path: impl AsRef<Path>, tx: &mut Transaction) {
                 size,
                 bt,
                 after,
+                thread_id, 
                 ..
             } => {
                 let id = alloc
                     .query_row(
-                        (after.as_millis() as u64, bt.to_string(), size, addr),
+                        (after.as_millis() as u64, bt.to_string(), size, addr, thread_id),
                         |r| Ok(r.get_unwrap::<_, i32>(0)),
                     )
                     .unwrap();
                 allocs.insert(addr, id);
             }
-            AllocEvent::Dealloc { addr, after, .. } => {
+            AllocEvent::Dealloc { addr, after, thread_id, .. } => {
                 if let Some(id) = allocs.remove(&addr) {
-                    dealloc.execute((after.as_millis() as u64, id)).unwrap();
+                    dealloc.execute((after.as_millis() as u64, thread_id, id)).unwrap();
                 }
             }
         }

@@ -1,19 +1,19 @@
-# Hipptrack
+# Rheaper
 
-Hipptrack is a in-process heap profiler for rust, that plugs in place and collect allocation data, and later stores it in a SQLite database for analysis. It supports runtime activation/deactivation.
+Rheaper is a in-process heap profiler for rust, that plugs in place and collect allocation data, and later stores it in a SQLite database for analysis. It supports runtime activation/deactivation.
 
 To enable heaptrack in you project, set the global allocator:
 
 ```rust
 #[global_allocator]
-static GLOBAL: hipptrack::Allocator<mimalloc::MiMalloc> =
-    hipptrack::Allocator::from_allocator(mimalloc::MiMalloc);
+static GLOBAL: Rheaper::Allocator<mimalloc::MiMalloc> =
+    rheaper::Allocator::from_allocator(mimalloc::MiMalloc);
 ```
 
 at any point, tracking can be enabled:
 
 ```rust
-let profile_path = hipptrack::enable_tracking(hipptrack::TrackerConfig {
+let profile_path = rheaper::enable_tracking(Rheaper::TrackerConfig {
     /// how deep should the call stack be sampled
     max_stack_depth: 30,
     /// each thread that allocates acquire a local tracker from the global pool. That's how many trackers can be created
@@ -30,13 +30,13 @@ let profile_path = hipptrack::enable_tracking(hipptrack::TrackerConfig {
 Recording is stopped with:
 
 ```rust
-hipptrack::disable_tracking();
+rheaper::disable_tracking();
 ```
 
 This will resolve pending backtraces, and flush profiling data to disk. After than, the profile can be analyzed
 
 ```
-hipptrack hip-4744532 profile.db
+rheaper rip-4744532 profile.db
 ```
 
 this will create a `profile.db` sqlite database. This database can be opened with sqlite to perform analytics.
@@ -83,23 +83,23 @@ frame_no  sym
 --------  ------------------------------------------------------------
 0         backtrace::backtrace::libunwind::trace::h313fcf731c1ed43a
 
-1         <hipptrack::alloc::Allocator<A> as core::alloc::global::Glob
+1         <rheaper::alloc::Allocator<A> as core::alloc::global::Glob
           alAlloc>::alloc::{{closure}}::hd945306712c35cdc
 
-2         hipptrack::alloc::with_local::{{closure}}::{{closure}}::{{cl
+2         rheaper::alloc::with_local::{{closure}}::{{closure}}::{{cl
           osure}}::{{closure}}::h984dd2b94bca5c66
 
-3         hipptrack::alloc::TrackerGuard::with::h2f7bcd4120d6efa7
+3         rheaper::alloc::TrackerGuard::with::h2f7bcd4120d6efa7
 
-4         hipptrack::alloc::with_local::{{closure}}::{{closure}}::{{cl
+4         rheaper::alloc::with_local::{{closure}}::{{closure}}::{{cl
           osure}}::h51d6f70563022314
 
 5         std::thread::local::LocalKey<T>::try_with::hff003d76feecb4a9
 
-6         hipptrack::alloc::with_local::{{closure}}::{{closure}}::h233
+6         rheaper::alloc::with_local::{{closure}}::{{closure}}::h233
           b8e1d7f3eb3c5
 
-7         hipptrack::alloc::untracked::{{closure}}::hc0fb5ce1fd3deaf9
+7         rheaper::alloc::untracked::{{closure}}::hc0fb5ce1fd3deaf9
 
 8         std::thread::local::LocalKey<T>::try_with::h8850e1a558f39df6
 

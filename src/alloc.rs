@@ -121,7 +121,7 @@ pub fn enable_tracking(config: TrackerConfig) -> Result<PathBuf, Error> {
     }
 
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    let path = format!("hip-{}", now.as_secs());
+    let path = format!("rip-{}", now.as_secs());
     let path = config.profile_dir.join(path);
 
     std::fs::create_dir_all(&path).unwrap();

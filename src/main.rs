@@ -1,4 +1,4 @@
-use hipptrack::parse_profile;
+use rheaper::parse_profile;
 
 fn main() {
     let profile_path = std::env::args().nth(1).unwrap();

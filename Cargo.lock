@@ -166,24 +166,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hipptrack"
-version = "0.1.0"
-dependencies = [
- "backtrace",
- "crc",
- "hashbrown",
- "itertools",
- "parking_lot",
- "rand",
- "rusqlite",
- "serde",
- "serde_json",
- "tempfile",
- "thread-id",
- "zerocopy",
-]
-
-[[package]]
 name = "itertools"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -350,6 +332,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c82cf8cff14456045f55ec4241383baeff27af886adb72ffb2162f99911de0fd"
 dependencies = [
  "bitflags",
+]
+
+[[package]]
+name = "rheaper"
+version = "0.1.1"
+dependencies = [
+ "backtrace",
+ "crc",
+ "hashbrown",
+ "itertools",
+ "parking_lot",
+ "rand",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thread-id",
+ "zerocopy",
 ]
 
 [[package]]

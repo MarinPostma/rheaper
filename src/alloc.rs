@@ -26,6 +26,7 @@ pub struct TrackerConfig {
     pub max_stack_depth: usize,
     pub max_trackers: usize,
     pub tracker_event_buffer_size: usize,
+    pub sample_rate: f64,
 }
 
 #[derive(Default)]
@@ -202,7 +203,12 @@ unsafe impl<A: GlobalAlloc> GlobalAlloc for Allocator<A> {
         let ptr = self.inner.alloc(layout);
 
         with_local(|local, global| {
-            // TODO: make stack depth configurable
+            if global.config.sample_rate != 1.0 {
+                if rand::random::<f64>() > global.config.sample_rate {
+                    return
+                }
+            }
+
             let mut trace = Vec::with_capacity(global.config.max_stack_depth);
 
             let crc = crc::Crc::<u64>::new(&CRC_64_ECMA_182);

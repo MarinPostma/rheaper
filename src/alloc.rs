@@ -1,5 +1,6 @@
 use std::alloc::GlobalAlloc;
 use std::cell::RefCell;
+use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{
     AtomicBool, AtomicUsize,
@@ -25,6 +26,7 @@ pub struct TrackerConfig {
     pub max_trackers: usize,
     pub tracker_event_buffer_size: usize,
     pub sample_rate: f64,
+    pub profile_dir: PathBuf,
 }
 
 #[derive(Default)]
@@ -98,20 +100,32 @@ pub struct Allocator<A> {
     inner: A,
 }
 
+#[derive(Debug)]
 pub enum Error {
     AlreadyEnabled,
-
 }
 
-pub fn enable_tracking(config: TrackerConfig) -> Result<(), Error> {
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::AlreadyEnabled => f.write_str("tracking already enabled"),
+        }
+    }
+}
+
+/// Enable tracking, and return the raw profile data path
+pub fn enable_tracking(config: TrackerConfig) -> Result<PathBuf, Error> {
+    dbg!();
     let mut guard = GLOBAL.write();
+    dbg!();
     if guard.is_some() {
         return Err(Error::AlreadyEnabled);
     }
 
+    dbg!();
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
     let path = format!("hip-{}", now.as_secs());
-    let path = <str as AsRef<Path>>::as_ref(path.as_str());
+    let path = config.profile_dir.join(path);
 
     std::fs::create_dir_all(&path).unwrap();
     std::fs::create_dir_all(path.join("events")).unwrap();
@@ -127,7 +141,7 @@ pub fn enable_tracking(config: TrackerConfig) -> Result<(), Error> {
 
     *guard = Some(global);
 
-    Ok(())
+    Ok(path.to_owned())
 }
 
 pub fn disable_tracking() {
@@ -167,22 +181,23 @@ impl<A> Allocator<A> {
 }
 
 fn with_local(f: impl FnOnce(&mut LocalTracker, &GlobalTracker)) {
-    let guard = GLOBAL.read();
-    if let Some(global) = guard.as_ref() {
-        let _ = DISABLE_TRACKING.try_with(|dis| {
-            if !dis.load(Relaxed) {
-                untracked(|| {
-                    let _ = TRACKER.try_with(|local| {
-                        let mut local = local.borrow_mut();
-                        if local.is_none() {
-                            *local = Some(global.acquire_tracker());
-                        }
+    if let Some(guard) = GLOBAL.try_read() {
+        if let Some(global) = guard.as_ref() {
+            let _ = DISABLE_TRACKING.try_with(|dis| {
+                if !dis.load(Relaxed) {
+                    untracked(|| {
+                        let _ = TRACKER.try_with(|local| {
+                            let mut local = local.borrow_mut();
+                            if local.is_none() {
+                                *local = Some(global.acquire_tracker());
+                            }
 
-                        local.as_ref().unwrap().with(|l| f(l, &global))
+                            local.as_ref().unwrap().with(|l| f(l, &global))
+                        });
                     });
-                });
-            }
-        });
+                }
+            });
+        }
     }
 }
 

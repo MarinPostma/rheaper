@@ -3,6 +3,9 @@ name = "rheaper"
 version = "0.2.0"
 edition = "2021"
 license = "MIT"
+description = "A in-process heap profiler for rust"
+repository = "https://github.com/MarinPostma/rheaper"
+readme = "README.md"
 
 [dependencies]
 backtrace = "0.3.73"

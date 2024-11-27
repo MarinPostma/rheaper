@@ -1,4 +1,6 @@
-# Rheaper
+<div style="margin:0 auto;">
+    <img src="./assets/logo.svg"/>
+</div>
 
 Rheaper is a in-process heap profiler for rust, that plugs in place and collect allocation data, and later stores it in a SQLite database for analysis. It supports runtime activation/deactivation.
 

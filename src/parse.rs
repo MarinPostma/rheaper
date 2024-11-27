@@ -106,7 +106,7 @@ fn read_events(path: impl AsRef<Path>, tx: &mut Transaction) {
             } => {
                 let id = alloc
                     .query_row(
-                        (after.as_millis() as u64, bt.to_string(), size, addr, thread_id),
+                        (after.as_nanos() as u64, bt.to_string(), size, addr, thread_id),
                         |r| Ok(r.get_unwrap::<_, i32>(0)),
                     )
                     .unwrap();
@@ -114,7 +114,7 @@ fn read_events(path: impl AsRef<Path>, tx: &mut Transaction) {
             }
             AllocEvent::Dealloc { addr, after, thread_id, .. } => {
                 if let Some(id) = allocs.remove(&addr) {
-                    dealloc.execute((after.as_millis() as u64, thread_id, id)).unwrap();
+                    dealloc.execute((after.as_nanos() as u64, thread_id, id)).unwrap();
                 }
             }
         }

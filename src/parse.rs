@@ -6,7 +6,7 @@ use hashbrown::HashMap;
 use itertools::Itertools;
 use rusqlite::{Connection, Transaction};
 
-use crate::proto::{AllocEvent, Backtrace};
+use crate::proto::{Event, Backtrace};
 
 pub fn parse_profile(profile_path: impl AsRef<Path>, db_path: impl AsRef<Path>) {
     let mut conn = Connection::open(db_path).unwrap();
@@ -79,7 +79,7 @@ fn read_events(path: impl AsRef<Path>, tx: &mut Transaction) {
     let mut iters = Vec::new();
     for p in event_paths {
         let reader = BufReader::new(File::open(p.unwrap().path()).unwrap());
-        iters.push(AllocEvent::deserialize_stream(reader).map(|e| e.unwrap()));
+        iters.push(Event::deserialize_stream(reader).map(|e| e.unwrap()));
     }
 
     let mut allocs = HashMap::new();
@@ -96,7 +96,7 @@ fn read_events(path: impl AsRef<Path>, tx: &mut Transaction) {
         print!("\r{count}          ");
         stdout().flush().unwrap();
         match event {
-            AllocEvent::Alloc {
+            Event::Alloc {
                 addr,
                 size,
                 bt,
@@ -106,15 +106,15 @@ fn read_events(path: impl AsRef<Path>, tx: &mut Transaction) {
             } => {
                 let id = alloc
                     .query_row(
-                        (after.as_nanos() as u64, bt.to_string(), size, addr, thread_id),
+                        (after.get(), bt.get().to_string(), size.get(), addr.get(), thread_id.get()),
                         |r| Ok(r.get_unwrap::<_, i32>(0)),
                     )
                     .unwrap();
                 allocs.insert(addr, id);
             }
-            AllocEvent::Dealloc { addr, after, thread_id, .. } => {
+            Event::Dealloc { addr, after, thread_id, .. } => {
                 if let Some(id) = allocs.remove(&addr) {
-                    dealloc.execute((after.as_nanos() as u64, thread_id, id)).unwrap();
+                    dealloc.execute((after.get(), thread_id.get(), id)).unwrap();
                 }
             }
         }

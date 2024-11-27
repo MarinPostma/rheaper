@@ -1,54 +1,78 @@
-use std::io::{self, ErrorKind, Read, Write};
-use std::mem::{size_of, MaybeUninit};
+use std::io::{self, Read, Write};
 use std::path::PathBuf;
-use std::time::Duration;
+use zerocopy::{Immutable, IntoBytes, KnownLayout, TryFromBytes};
+use zerocopy::little_endian::U64;
 
-#[derive(PartialEq, Debug)]
-#[repr(C)]
-pub(crate) enum AllocEvent {
+#[derive(PartialEq, Debug, KnownLayout, Immutable, IntoBytes, TryFromBytes, Clone, Copy)]
+#[repr(u8)]
+pub(crate) enum Event {
     Alloc {
-        seq: usize,
-        bt: u64,
-        after: Duration,
-        size: usize,
-        addr: usize,
-        thread_id: usize,
-    },
+        /// duration in ns
+        after: U64,
+        seq: U64,
+        addr: U64,
+        thread_id: U64,
+        bt: U64,
+        size: U64,
+    } = 0,
     Dealloc {
-        seq: usize,
-        after: Duration,
-        addr: usize,
-        thread_id: usize,
-    },
+        /// duration in ns
+        after: U64,
+        seq: U64,
+        addr: U64,
+        thread_id: U64,
+        _pad: [u8; 16],
+    } = 1,
 }
 
-impl AllocEvent {
-    // ain't no faster serialization than straight out struct bytes
+impl Event {
     pub(crate) fn serialize<W: Write>(&self, mut writer: W) -> io::Result<()> {
-        let bytes: &[u8; size_of::<Self>()] = unsafe { std::mem::transmute(self) };
-        writer.write_all(bytes)?;
+        writer.write_all(self.as_bytes())?;
         Ok(())
     }
 
     pub(crate) fn deserialize_stream<'a, R: Read + 'a>(
         mut reader: R,
-    ) -> impl Iterator<Item = io::Result<AllocEvent>> + 'a {
-        std::iter::from_fn(move || unsafe {
-            let mut buffer: MaybeUninit<AllocEvent> = MaybeUninit::uninit();
-            let slice =
-                std::slice::from_raw_parts_mut(buffer.as_mut_ptr() as *mut u8, size_of::<Self>());
-            match reader.read_exact(slice) {
-                Ok(()) => Some(Ok(buffer.assume_init())),
-                Err(e) if e.kind() == ErrorKind::UnexpectedEof => None,
-                Err(e) => Some(Err(e)),
+    ) -> impl Iterator<Item = io::Result<Event>> + 'a {
+        let mut buffer = vec![0; size_of::<Event>() * 2048];
+        let mut current = 0;
+        let mut init = 0;
+
+        std::iter::from_fn(move || {
+            loop {
+                if init == 0 {
+                    while init != buffer.len() {
+                        match reader.read(&mut buffer[init..]) {
+                            Ok(0) if init == 0 => return None,
+                            Ok(0) => break,
+                            Ok(n) => {
+                                init += n;
+                            }
+                            Err(e) => return Some(Err(e)),
+                        }
+                    }
+                }
+
+                if current < init {
+                    match Event::try_read_from_prefix(&buffer[current..]) {
+                        Ok((e, _)) => {
+                            current += size_of::<Event>();
+                            return Some(Ok(e))
+                        },
+                        Err(_) => return Some(Err(io::Error::new(io::ErrorKind::InvalidData, "invalid event"))),
+                    }
+                } else {
+                    init = 0;
+                    current = 0;
+                }
             }
         })
     }
 
-    pub(crate) fn seq(&self) -> usize {
+    pub(crate) fn seq(&self) -> u64 {
         match self {
-            AllocEvent::Alloc { seq, .. } => *seq,
-            AllocEvent::Dealloc { seq, .. } => *seq,
+            Event::Alloc { seq, .. } => seq.get(),
+            Event::Dealloc { seq, .. } => seq.get(),
         }
     }
 }
@@ -82,7 +106,7 @@ mod test {
         let mut file = tempfile().unwrap();
         let mut writer = BufWriter::new(&mut file);
 
-        let event1 = AllocEvent::Alloc {
+        let event1 = Event::Alloc {
             seq: 0,
             bt: 123,
             after: Instant::now().elapsed(),
@@ -90,7 +114,7 @@ mod test {
             addr: 4938,
             thread_id: 0,
         };
-        let event2 = AllocEvent::Dealloc {
+        let event2 = Event::Dealloc {
             seq: 1,
             after: Instant::now().elapsed(),
             addr: 53433,
@@ -106,7 +130,7 @@ mod test {
         file.seek(io::SeekFrom::Start(0)).unwrap();
 
         let mut reader = BufReader::new(&mut file);
-        let mut iter = AllocEvent::deserialize_stream(&mut reader);
+        let mut iter = Event::deserialize_stream(&mut reader);
 
         assert_eq!(iter.next().unwrap().unwrap(), event1);
         assert_eq!(iter.next().unwrap().unwrap(), event2);

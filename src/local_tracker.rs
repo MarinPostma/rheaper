@@ -7,11 +7,11 @@ use std::io::Write as _;
 use backtrace::resolve;
 use hashbrown::HashMap;
 
-use crate::proto::{AllocEvent, Frame};
+use crate::proto::{Event, Frame};
 
 pub(crate) struct LocalTracker {
     pub(crate) bts: HashMap<u64, Vec<usize>>,
-    pub(crate) events: Vec<AllocEvent>,
+    pub(crate) events: Vec<Event>,
     pub(crate) file: BufWriter<std::fs::File>,
     pub(crate) path: PathBuf,
 }

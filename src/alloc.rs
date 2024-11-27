@@ -2,8 +2,9 @@ use std::alloc::GlobalAlloc;
 use std::cell::RefCell;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicU64;
 use std::sync::atomic::{
-    AtomicBool, AtomicUsize,
+    AtomicBool,
     Ordering::Relaxed,
 };
 use std::sync::{Arc, Weak};
@@ -15,7 +16,7 @@ use backtrace::trace_unsynchronized;
 use crc::CRC_64_ECMA_182;
 use parking_lot::{Mutex, RwLock};
 
-use crate::{local_tracker::LocalTracker, proto::AllocEvent};
+use crate::{local_tracker::LocalTracker, proto::Event};
 
 /// The global tracker configuration. each thread that allocated acquire a LocalTracker from the
 /// GlobalTracker tracker pool.
@@ -55,7 +56,7 @@ impl TrackersPool {
 
 struct GlobalTracker {
     started_at: Instant,
-    seq: AtomicUsize,
+    seq: AtomicU64,
     config: TrackerConfig,
     pool: Mutex<TrackersPool>,
     profile_path: PathBuf,
@@ -69,7 +70,7 @@ struct TrackerGuard {
 impl TrackerGuard {
     fn with(&self, f: impl FnOnce(&mut LocalTracker)) {
         if let Some(tracker) = self.inner.upgrade() {
-            f(&mut *tracker.lock());
+            f(&mut tracker.lock());
         }
     }
 }
@@ -92,8 +93,8 @@ impl GlobalTracker {
 }
 
 thread_local! {
-    static DISABLE_TRACKING: AtomicBool = AtomicBool::new(false);
-    pub static TRACKER: RefCell<Option<TrackerGuard>> = RefCell::new(None);
+    static DISABLE_TRACKING: AtomicBool = const { AtomicBool::new(false) };
+    pub static TRACKER: RefCell<Option<TrackerGuard>> = const { RefCell::new(None) };
 }
 
 pub struct Allocator<A> {
@@ -133,7 +134,7 @@ pub fn enable_tracking(config: TrackerConfig) -> Result<PathBuf, Error> {
         config,
         pool: Default::default(),
         profile_path: path.to_owned(),
-        seq: AtomicUsize::new(0),
+        seq: AtomicU64::new(0),
     };
 
     *guard = Some(global);
@@ -189,7 +190,7 @@ fn with_local(f: impl FnOnce(&mut LocalTracker, &GlobalTracker)) {
                                 *local = Some(global.acquire_tracker());
                             }
 
-                            local.as_ref().unwrap().with(|l| f(l, &global))
+                            local.as_ref().unwrap().with(|l| f(l, global))
                         });
                     });
                 }
@@ -203,10 +204,8 @@ unsafe impl<A: GlobalAlloc> GlobalAlloc for Allocator<A> {
         let ptr = self.inner.alloc(layout);
 
         with_local(|local, global| {
-            if global.config.sample_rate != 1.0 {
-                if rand::random::<f64>() > global.config.sample_rate {
-                    return;
-                }
+            if global.config.sample_rate != 1.0 && rand::random::<f64>() > global.config.sample_rate {
+                return;
             }
 
             let mut trace = Vec::with_capacity(global.config.max_stack_depth);
@@ -227,13 +226,15 @@ unsafe impl<A: GlobalAlloc> GlobalAlloc for Allocator<A> {
             let seq = global
                 .seq
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            local.events.push(AllocEvent::Alloc {
-                seq,
-                bt: id,
-                after,
-                size: layout.size(),
-                addr: ptr as *mut usize as usize,
-                thread_id: 0,
+            local.events.push(Event::Alloc {
+                seq: seq.into(),
+                bt: id.into(),
+                // we convert from u128 to u64 here, but that OK, the duration is relative to the
+                // start of the programs, we can fit 292 years in i64::max...
+                after: (after.as_nanos() as u64).into(),
+                size: (layout.size() as u64).into(),
+                addr: (ptr as *mut usize as u64).into(),
+                thread_id: 0.into(),
             });
 
             local.bts.insert(id, trace);
@@ -251,11 +252,12 @@ unsafe impl<A: GlobalAlloc> GlobalAlloc for Allocator<A> {
             let seq = global
                 .seq
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            local.events.push(AllocEvent::Dealloc {
-                seq,
-                after,
-                addr: ptr as *mut usize as usize,
-                thread_id: 0,
+            local.events.push(Event::Dealloc {
+                seq: seq.into(),
+                after: (after.as_nanos() as u64).into(),
+                addr: (ptr as *mut usize as u64).into(),
+                thread_id: 0.into(),
+                _pad: [0; 16]
             });
 
             local.maybe_flush(global.config.tracker_event_buffer_size);

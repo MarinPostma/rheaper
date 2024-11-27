@@ -1,8 +1,19 @@
+use std::path::PathBuf;
+
+use clap::Parser as _;
 use rheaper::parse_profile;
 
-fn main() {
-    let profile_path = std::env::args().nth(1).unwrap();
-    let out_path = std::env::args().nth(2).unwrap();
+#[derive(Debug, clap::Parser)]
+/// Transforms profile data collected by the rheaper lib into a SQLite3 database
+struct Command {
+    /// Path pointing the the `rip-*` profile data
+    profile_data: PathBuf,
+    /// Path where the analyzed SQLite3 database containing the analyzed data will be written
+    analyzed_db: PathBuf,
+}
 
-    parse_profile(profile_path, out_path);
+fn main() {
+    let cmd = Command::parse();
+
+    parse_profile(cmd.profile_data, cmd.analyzed_db);
 }

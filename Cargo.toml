@@ -9,6 +9,7 @@ readme = "README.md"
 
 [dependencies]
 backtrace = "0.3.73"
+clap = { version = "4.5.21", features = ["derive"], optional = true }
 crc = "3.2.1"
 hashbrown = "0.14.5"
 itertools = "0.13.0"
@@ -26,4 +27,4 @@ tempfile = "3.10.1"
 [features]
 default = ["parse", "allocator"]
 allocator = []
-parse = ["dep:rusqlite"]
+parse = ["dep:rusqlite", "dep:clap"]
